@@ -1,0 +1,349 @@
+namespace ca.mcgill.ecse223.tileo.model;
+
+use TileOPersistence.ump;
+class TileO {
+  1 <@>- * Game games;
+  1 -> 0..1 Game CurrentGame;
+}
+
+class Game {
+	mode { DESIGN{} GAME{} GAME_WON{} GAME_ROLLDIEACTIONCARD{} GAME_CONNECTTILESACTIONCARD{} GAME_REMOVECONNECTIONACTIONCARD{} GAME_TELEPORTACTIONCARD{} GAME_LOSETURNACTIONCARD{} GAME_LOSETURNRANDOMACTIONCARD{} GAME_CHANGETILEACTIONCARD{} GAME_SWITCHPLAYERSACTIONCARD{} GAME_SWAPPOSITIONACTIONCARD{} GAME_MOVEWINTILEACTIONCARD{} GAME_SHOWACTIONTILESACTIONCARD{} GAME_CHOOSEADDITIONALMOVEACTIONCARD{}}
+  1 <@>- 2..4 Player players;
+  1 <@>- * Tile tiles;
+  1 <@>- * Connection connections;
+  1 <@>- 1 Deck deck;
+  1 <@>- 1 Die die;
+  1 -> 0..1 Player currentPlayer;
+  1 -> 0..1 WinTile winTile;
+	const Integer SpareConnectionPieces = 32;
+	Integer currentConnectionPieces;
+	const Integer NumberOfActionCards = 32;
+
+	public void connectTiles(Tile tile1, Tile tile2) {
+	// TODO Auto-generated method stub
+  }
+}
+
+class Player {
+depend java.util.List;
+color	{ RED{} BLUE{} GREEN{} YELLOW{} }
+	  1 -> 0..1 Tile startingTile;
+  0..4 -> 0..1 Tile currentTile;
+	unique Integer number;
+	Integer turnsUntilActive = 0;playerStatus
+	{
+		Active{
+			loseTurns(int n) [n>0]/{
+				setTurnsUntilActive(getTurnsUntilActive() + n);
+			} -> InActive;
+			loseTurnsRandom() / {
+				setTurnsUntilActive(getRandomNum() + getTurnsUntilActive());
+			} -> InActive;
+		}
+		InActive{
+			takeTurn() [getTurnsUntilActive() > 1] / { 
+				setTurnsUntilActive(getTurnsUntilActive() - 1);
+			}  -> InActive;
+			takeTurn() [getTurnsUntilActive() <= 1] / { 
+				setTurnsUntilActive(0);
+			}  -> Active;
+			loseTurns(int n) [n>0] / {
+				setTurnsUntilActive(getTurnsUntilActive() + n);
+			} -> InActive;
+			loseTurnsRandom() / {
+				setTurnsUntilActive(getTurnsUntilActive() + getRandomNum());
+			} -> InActive;
+		}
+
+	}
+
+	public List<Tile> getPossibleMoves(int number) {
+		return this.getCurrentTile().getNeighbors(number);
+	}
+
+	public int roll() {
+	  Random random = new Random();
+	  int rndNum = random.nextInt(6) + 1;
+	  System.out.println(rndNum);
+	  return rndNum;
+  }
+
+	public int getRandomNum(){
+	  return (int)System.nanoTime()%6+1;
+  }
+}
+
+class Tile {
+	abstract;
+	2 tiles--0..4 Connection connections;
+	Integer x;
+	Integer y;
+	Boolean hasBeenVisited = false;
+
+	public void land(){};
+
+	public boolean isAdjacent(Tile tile2) {
+		// TODO Auto-generated method stub
+		return false;
+	}
+
+	public List<Tile> getNeighbors(int number) {
+	  
+	  Tile startingTile = this;
+	  Set<Tile> currentTiles = new HashSet<Tile>();
+	  Set<Connection> travelledConnections = new HashSet<Connection>();
+	  List<Tile> possibleFinalTiles = new LinkedList<Tile>();
+	  
+	  currentTiles.add(this);
+	  
+	  for (int i = 0; i < number; i++) {
+		  Set<Tile> nextTiles = new HashSet<Tile>();
+		  for (Tile oneCurrentTile : currentTiles) {
+			  List<Connection> currentConnections = oneCurrentTile.getConnections();
+			  for (Connection oneCurrentConnection : currentConnections) {
+				  if (!travelledConnections.contains(oneCurrentConnection)) {
+					  travelledConnections.add(oneCurrentConnection);
+					  List<Tile> connectedTiles = oneCurrentConnection.getTiles();
+					  for (Tile oneConnectedTile : connectedTiles) {
+						  if (!oneConnectedTile.equals(oneCurrentTile) && !oneConnectedTile.equals(startingTile)) {
+							  nextTiles.add(oneConnectedTile);
+						  }
+					  }
+				  }
+			  }
+		  }
+		  currentTiles = nextTiles;
+	  }
+	  
+	  for (Tile possibleFinalTile : currentTiles) {
+		  possibleFinalTiles.add(possibleFinalTile);
+	  }
+	  
+	  return possibleFinalTiles;}
+}
+
+class ActionTile {
+depend ca.mcgill.ecse223.tileo.application.Main;
+depend ca.mcgill.ecse223.tileo.model.Game.Mode;
+	isA Tile;
+
+	immutable Integer inactivityPeriod;
+	Integer turnsUntilActive = 0;
+	actionTileStatus{
+		Active{
+			deactivate() [getInactivityPeriod() > 0] / {
+				setTurnsUntilActive(getInactivityPeriod() + 1 );
+			} -> InActive;
+		}
+		InActive{
+			takeTurn() [getTurnsUntilActive() > 1] / {
+				setTurnsUntilActive(getTurnsUntilActive() - 1);
+			}  -> InActive;
+			takeTurn() [getTurnsUntilActive() <= 1] / { 
+				setTurnsUntilActive(0);
+			}  -> Active;
+		}
+	
+	}
+
+	public void land() {
+		TileO tileO = Main.getTileO();
+		Game currentGame = tileO.getCurrentGame();
+		Player currentPlayer = currentGame.getCurrentPlayer();
+		currentPlayer.setCurrentTile(this);
+		this.setHasBeenVisited(true);
+		Deck deck = currentGame.getDeck();
+		ActionCard currentCard;
+		if (deck.hasCurrentCard()) {
+			currentCard = deck.getCurrentCard();
+		} else {
+			deck.setCurrentCard(deck.getCard(0));
+			currentCard = deck.getCurrentCard();
+		}
+		Mode mode = currentCard.getActionCardGameMode();
+		currentGame.setMode(mode);
+	}
+}
+
+class NormalTile {
+depend ca.mcgill.ecse223.tileo.application.Main;
+depend ca.mcgill.ecse223.tileo.controller.InvalidInputException;
+depend ca.mcgill.ecse223.tileo.model.Game.Mode;
+
+	isA Tile;
+
+	public void land() {
+
+		TileO tileO = Main.getTileO();
+		Game currentGame = tileO.getCurrentGame();
+		Player currentPlayer = currentGame.getCurrentPlayer();
+		currentPlayer.setCurrentTile(this);
+		boolean wasSet = false;
+		// if currentPlayer is last player
+		// assumes players will be numbered starting from 0
+		if (currentGame.indexOfPlayer(currentPlayer) == (currentGame.numberOfPlayers() - 1)) {
+			// first player is player
+			wasSet = currentGame.setCurrentPlayer(currentGame.getPlayer(0));
+		} else {
+			wasSet = currentGame.setCurrentPlayer(currentGame.getPlayer(currentGame.indexOfPlayer(currentPlayer) + 1));
+		}
+		if (wasSet == false) {
+			try {
+				throw new InvalidInputException("Not set");
+			} catch (InvalidInputException e) {
+				e.printStackTrace();
+			}
+		}
+		this.setHasBeenVisited(true);
+		currentGame.setMode(Mode.GAME);
+	}
+}
+
+class WinTile {
+depend ca.mcgill.ecse223.tileo.application.Main;
+depend ca.mcgill.ecse223.tileo.model.Game.Mode;
+
+	isA Tile;
+
+	public void land() {
+		TileO tileO = Main.getTileO();
+		Game currentGame = tileO.getCurrentGame();
+		this.setHasBeenVisited(true);
+		currentGame.setMode(Mode.GAME_WON);
+	}
+}
+
+class Connection {
+}
+
+class Deck {
+	1<@>-0..32 ActionCard cards;
+	1->0..1 ActionCard currentCard;
+
+	public void shuffle() {
+		List<ActionCard> shuffleableCards = new LinkedList<ActionCard>(this.getCards());
+		Collections.shuffle(shuffleableCards);
+		this.cards = shuffleableCards;
+		this.setCurrentCard(this.cards.get(0));
+}
+
+public void deleteall() {
+	  	cards = new ArrayList<ActionCard>();
+	
+}
+}
+
+class ActionCard {
+depend ca.mcgill.ecse223.tileo.model.Game.Mode;abstract;
+	immutable String instructions;
+}
+
+class RollDieActionCard {
+	depend java.util.List;
+
+	depend ca.mcgill.ecse223.tileo.application.Main;
+	isA ActionCard;
+
+	public List<Tile> play() {
+		TileO tileO = Main.getTileO();
+		Game currentGame = tileO.getCurrentGame();
+		Die die = currentGame.getDie();
+		int rolledNum = die.roll();
+		Player currentPlayer = currentGame.getCurrentPlayer();
+		return currentPlayer.getPossibleMoves(rolledNum);
+	}
+}
+
+class ConnectTilesActionCard {
+	depend ca.mcgill.ecse223.tileo.controller.InvalidInputException;
+	depend ca.mcgill.ecse223.tileo.model.Game.Mode;
+	isA ActionCard;
+	public void play(Tile tile1, Tile tile2) throws InvalidInputException {
+		// need the 4th feature in design mode
+		if (tile1.getGame().getTileO().indexOfGame(tile1.getGame()) == tile2.getGame().getTileO()
+				.indexOfGame(tile2.getGame())) {
+			tile1.getGame().connectTiles(tile1, tile2);
+		} else
+			throw new InvalidInputException("Tiles in different Games");
+	}
+	public Mode getActionCardGameMode(String instruction) {
+		String ActionType[] = { "", "Connect Tiles", "Lose Turn", "Remove Connection", "Teleport", "Roll Again",
+				"Lose Random Turns", "Change Tile", "Switch Player Turns", "Swap Positions","Choose Addtional Move" };
+		Mode[] gamemode = { null, Mode.GAME_CONNECTTILESACTIONCARD, Mode.GAME_LOSETURNACTIONCARD,
+				Mode.GAME_REMOVECONNECTIONACTIONCARD, Mode.GAME_TELEPORTACTIONCARD, Mode.GAME_ROLLDIEACTIONCARD,
+				Mode.GAME_LOSETURNRANDOMACTIONCARD, Mode.GAME_CHANGETILEACTIONCARD, Mode.GAME_SWITCHPLAYERSACTIONCARD,
+				Mode.GAME_SWAPPOSITIONACTIONCARD, Mode.GAME_CHOOSEADDITIONALMOVEACTIONCARD };
+
+		for (int i = 0; i < ActionType.length; i++) {
+			if (instruction.equals(ActionType[i])) {
+
+				return gamemode[i];
+			}
+		}
+		return null;
+	}
+}
+
+class RemoveConnectionActionCard {
+	isA ActionCard;
+
+	public void play(Connection connection) {
+		// need the 5th feature in design mode
+
+		connection.getGame().removeConnection(connection);
+	}
+}
+
+class TeleportActionCard {
+	isA ActionCard;
+
+	public void play(Tile tile) {
+		// need the 3rd feature in play mode
+		tile.land();
+	}
+}
+
+class LoseTurnActionCard {
+	isA ActionCard;
+}
+
+class LoseTurnRandomActionCard {
+	isA ActionCard;
+}
+
+class Die {
+	depend java.util.Random;
+
+	public int roll() {
+		Random random = new Random();
+		int rndNum = random.nextInt(6) + 1;
+		System.out.println(rndNum);
+		return rndNum;
+	}
+}
+
+class ChangeTileActionCard {
+	isA ActionCard;
+}
+
+class SwitchPlayersActionCard {
+	isA ActionCard;
+}
+
+class SwapPositionActionCard {
+	isA ActionCard;
+}
+
+class MoveWintileActionCard {
+	isA ActionCard;
+}
+
+class ShowActionTilesActionCard {
+	isA ActionCard;
+}
+class ChooseAdditionalMoveActionCard{
+    isA ActionCard;
+}   
+
+
+}
